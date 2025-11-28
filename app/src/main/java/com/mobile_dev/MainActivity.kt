@@ -3,7 +3,6 @@ package com.mobile_dev
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,13 +16,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.pow
-import kotlin.math.sqrt
 
 // Dark theme colors matching globals.css
 private val DarkBackground = Color(0xFF212121)
 private val LightForeground = Color(0xFFFFFFFF)
 private val PrimaryColor = Color(0xFF90CAF9)
 private val SecondaryColor = Color(0xFFCE93D8)
+private val TertiaryColor = Color(0xFF80CBC4)
+private val ErrorColor = Color(0xFFEF5350)
 private val BorderColor = Color(0xFFFFFFFF)
 
 private val AppColorScheme = darkColorScheme(
@@ -35,6 +35,13 @@ private val AppColorScheme = darkColorScheme(
     onSecondary = Color.Black,
     secondaryContainer = SecondaryColor.copy(alpha = 0.3f),
     onSecondaryContainer = LightForeground,
+    tertiary = TertiaryColor,
+    onTertiary = Color.Black,
+    tertiaryContainer = TertiaryColor.copy(alpha = 0.3f),
+    onTertiaryContainer = LightForeground,
+    error = ErrorColor,
+    errorContainer = ErrorColor.copy(alpha = 0.3f),
+    onErrorContainer = LightForeground,
     background = DarkBackground,
     onBackground = LightForeground,
     surface = DarkBackground,
@@ -53,45 +60,25 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ElectricalLoadCalculatorScreen()
+                    ReliabilityCalculatorScreen()
                 }
             }
         }
     }
 }
 
-data class EquipmentRow(
-    val id: Int,
-    val name: String,
-    var erEfficiency: String = "",
-    var loadPower: String = "",
-    var loadVoltage: String = "",
-    var erAmount: String = "",
-    var erRatedPower: String = "",
-    var utilizationRate: String = "",
-    var reactivePower: String = ""
-)
-
 @Composable
-fun ElectricalLoadCalculatorScreen() {
-    var selectedEquipment by remember { mutableStateOf(0) }
+fun ReliabilityCalculatorScreen() {
+    var selectedTask by remember { mutableStateOf(0) }
 
-    var rows by remember {
-        mutableStateOf(
-            mapOf(
-                1 to EquipmentRow(1, "Шліфувальний верстат"),
-                2 to EquipmentRow(2, "Свердлильний верстат"),
-                3 to EquipmentRow(3, "Фугувальний верстат"),
-                4 to EquipmentRow(4, "Циркулярна пила"),
-                5 to EquipmentRow(5, "Прес"),
-                6 to EquipmentRow(6, "Полірувальний верстат"),
-                7 to EquipmentRow(7, "Фрезерний верстат"),
-                8 to EquipmentRow(8, "Вентилятор")
-            )
-        )
-    }
-
-    val erPowerFactor = 1.16
+    // Task 2 states
+    var zperAVal by remember { mutableStateOf("23.6") }
+    var zperPVal by remember { mutableStateOf("17.6") }
+    var omegaVal by remember { mutableStateOf("0.01") }
+    var tvVal by remember { mutableStateOf("0.045") }
+    var kpVal by remember { mutableStateOf("0.004") }
+    var pmVal by remember { mutableStateOf("5120") }
+    var tmVal by remember { mutableStateOf("6451") }
 
     Column(
         modifier = Modifier
@@ -101,7 +88,7 @@ fun ElectricalLoadCalculatorScreen() {
     ) {
         // Header
         Text(
-            text = "Веб калькулятор для розрахунку електричних навантажень об'єктів з використанням методу впорядкованих діаграм",
+            text = "Веб калькулятор для порівняння надійності одноколової та двоколової систем електропередачі та розрахунку збитків від перерв електропостачання у разі застосування однотрансформаторної ГТП",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -110,7 +97,7 @@ fun ElectricalLoadCalculatorScreen() {
                 .padding(bottom = 24.dp)
         )
 
-        // Equipment Selector
+        // Task Selector
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -120,405 +107,436 @@ fun ElectricalLoadCalculatorScreen() {
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "Найменування ЕП (електроприймача):",
+                    text = "Вибір завдання:",
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                rows.values.forEach { row ->
-                    EquipmentButton(
-                        text = "[${row.id}] ${row.name}",
-                        isSelected = selectedEquipment == row.id,
-                        onClick = { selectedEquipment = row.id }
-                    )
-                }
-            }
-        }
-
-        // Input Section
-        if (selectedEquipment > 0) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        "Параметри для [${selectedEquipment}] ${rows[selectedEquipment]?.name}:",
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    val currentRow = rows[selectedEquipment]
-                    if (currentRow != null) {
-                        InputField(
-                            label = "η_н (ККД ЕП)",
-                            value = currentRow.erEfficiency,
-                            onValueChange = {
-                                rows = rows.toMutableMap().apply {
-                                    this[selectedEquipment] = currentRow.copy(erEfficiency = it)
-                                }
-                            }
-                        )
-
-                        InputField(
-                            label = "cos φ (коефіцієнт потужності)",
-                            value = currentRow.loadPower,
-                            onValueChange = {
-                                rows = rows.toMutableMap().apply {
-                                    this[selectedEquipment] = currentRow.copy(loadPower = it)
-                                }
-                            }
-                        )
-
-                        InputField(
-                            label = "U_н, кВ (напруга навантаження)",
-                            value = currentRow.loadVoltage,
-                            onValueChange = {
-                                rows = rows.toMutableMap().apply {
-                                    this[selectedEquipment] = currentRow.copy(loadVoltage = it)
-                                }
-                            }
-                        )
-
-                        InputField(
-                            label = "n, шт (кількість ЕП)",
-                            value = currentRow.erAmount,
-                            onValueChange = {
-                                rows = rows.toMutableMap().apply {
-                                    this[selectedEquipment] = currentRow.copy(erAmount = it)
-                                }
-                            }
-                        )
-
-                        InputField(
-                            label = "P_н, кВт (номінальна потужність)",
-                            value = currentRow.erRatedPower,
-                            onValueChange = {
-                                rows = rows.toMutableMap().apply {
-                                    this[selectedEquipment] = currentRow.copy(erRatedPower = it)
-                                }
-                            }
-                        )
-
-                        InputField(
-                            label = "K_в (коефіцієнт використання)",
-                            value = currentRow.utilizationRate,
-                            onValueChange = {
-                                rows = rows.toMutableMap().apply {
-                                    this[selectedEquipment] = currentRow.copy(utilizationRate = it)
-                                }
-                            }
-                        )
-
-                        InputField(
-                            label = "tg φ (коефіцієнт реактивної потужності)",
-                            value = currentRow.reactivePower,
-                            onValueChange = {
-                                rows = rows.toMutableMap().apply {
-                                    this[selectedEquipment] = currentRow.copy(reactivePower = it)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        // Results Table
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    "Розрахункова таблиця:",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(bottom = 12.dp)
+                TaskSelectorButton(
+                    text = "[1] Порівняння надійності систем електропередачі",
+                    isSelected = selectedTask == 1,
+                    onClick = { selectedTask = 1 }
                 )
 
-                ResultsTable(rows, erPowerFactor)
+                TaskSelectorButton(
+                    text = "[2] Розрахунок збитків від перерв електропостачання",
+                    isSelected = selectedTask == 2,
+                    onClick = { selectedTask = 2 }
+                )
             }
+        }
+
+        // Input/Info Section
+        when (selectedTask) {
+            1 -> Task1Info()
+            2 -> Task2Input(
+                zperAVal = zperAVal,
+                zperPVal = zperPVal,
+                omegaVal = omegaVal,
+                tvVal = tvVal,
+                kpVal = kpVal,
+                pmVal = pmVal,
+                tmVal = tmVal,
+                onZperAChange = { zperAVal = it },
+                onZperPChange = { zperPVal = it },
+                onOmegaChange = { omegaVal = it },
+                onTvChange = { tvVal = it },
+                onKpChange = { kpVal = it },
+                onPmChange = { pmVal = it },
+                onTmChange = { tmVal = it }
+            )
+        }
+
+        // Results Section
+        when (selectedTask) {
+            1 -> Task1Results()
+            2 -> Task2Results(
+                zperA = zperAVal.toDoubleOrNull() ?: 0.0,
+                zperP = zperPVal.toDoubleOrNull() ?: 0.0,
+                omega = omegaVal.toDoubleOrNull() ?: 0.0,
+                tv = tvVal.toDoubleOrNull() ?: 0.0,
+                kp = kpVal.toDoubleOrNull() ?: 0.0,
+                pm = pmVal.toDoubleOrNull() ?: 0.0,
+                tm = tmVal.toDoubleOrNull() ?: 0.0
+            )
         }
     }
 }
 
 @Composable
-fun EquipmentButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
+fun TaskSelectorButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(vertical = 4.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Text(text, textAlign = TextAlign.Start, fontSize = 13.sp)
+        Text(text, textAlign = TextAlign.Start)
     }
 }
 
 @Composable
-fun InputField(label: String, value: String, onValueChange: (String) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = label, modifier = Modifier.weight(1.5f), fontSize = 13.sp)
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            singleLine = true
-        )
-    }
-}
-
-@Composable
-fun ResultsTable(rows: Map<Int, EquipmentRow>, erPowerFactor: Double) {
-    val calculations = remember(rows) {
-        calculateTotals(rows, erPowerFactor)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-    ) {
-        // Individual rows
-        rows.values.forEach { row ->
-            val product1 = calcProduct1(
-                row.erAmount.toDoubleOrNull() ?: 0.0,
-                row.erRatedPower.toDoubleOrNull() ?: 0.0
-            )
-            val product2 = calcProduct2(
-                row.erAmount.toDoubleOrNull() ?: 0.0,
-                row.erRatedPower.toDoubleOrNull() ?: 0.0,
-                row.utilizationRate.toDoubleOrNull() ?: 0.0
-            )
-            val product3 = calcProduct3(
-                row.erAmount.toDoubleOrNull() ?: 0.0,
-                row.erRatedPower.toDoubleOrNull() ?: 0.0,
-                row.utilizationRate.toDoubleOrNull() ?: 0.0,
-                row.reactivePower.toDoubleOrNull() ?: 0.0
-            )
-            val product4 = calcProduct4(
-                row.erAmount.toDoubleOrNull() ?: 0.0,
-                row.erRatedPower.toDoubleOrNull() ?: 0.0
-            )
-            val groupCurrent = calcGroupCurrent(
-                row.erAmount.toDoubleOrNull() ?: 0.0,
-                row.erRatedPower.toDoubleOrNull() ?: 0.0,
-                row.loadVoltage.toDoubleOrNull() ?: 1.0,
-                row.loadPower.toDoubleOrNull() ?: 1.0,
-                row.erEfficiency.toDoubleOrNull() ?: 1.0
-            )
-
-            EquipmentResultRow(
-                name = "[${row.id}]",
-                values = listOf(
-                    row.erAmount,
-                    row.erRatedPower,
-                    String.format("%.2f", product1),
-                    row.utilizationRate,
-                    String.format("%.2f", product2),
-                    String.format("%.2f", product3),
-                    String.format("%.2f", product4),
-                    String.format("%.2f", groupCurrent)
-                )
-            )
-        }
-
-        Divider(thickness = 2.dp, modifier = Modifier.padding(vertical = 8.dp))
-
-        // Totals row
-        TotalsResultRow(calculations)
-    }
-}
-
-@Composable
-fun EquipmentResultRow(name: String, values: List<String>) {
+fun Task1Info() {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
+            .padding(bottom = 16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
         )
     ) {
-        Row(
-            modifier = Modifier.padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        Column(
+            modifier = Modifier.padding(16.dp)
         ) {
-            Text(
-                text = name,
-                modifier = Modifier.width(40.dp),
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp
+            Text("Константи (всі значення задано):", fontWeight = FontWeight.Bold)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text("Частота відмов (ωᵢ), рік⁻¹:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text("  • ПЛ-110 кВ: 0.007 (на 1 км)", fontSize = 12.sp)
+            Text("  • Т-110 кВ: 0.015", fontSize = 12.sp)
+            Text("  • В-110 кВ: 0.01", fontSize = 12.sp)
+            Text("  • В-10 кВ (малооливний): 0.02", fontSize = 12.sp)
+            Text("  • Збірні шини 10кВ: 0.03 (на 1 приєднання)", fontSize = 12.sp)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text("Час відновлення (tвi), год:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text("  • ПЛ-110 кВ: 10 год", fontSize = 12.sp)
+            Text("  • Т-110 кВ: 100 год", fontSize = 12.sp)
+            Text("  • В-110 кВ: 30 год", fontSize = 12.sp)
+            Text("  • В-10 кВ: 15 год", fontSize = 12.sp)
+            Text("  • Збірні шини 10кВ: 2 год", fontSize = 12.sp)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text("Інші параметри:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text("  • kmax: 43 год", fontSize = 12.sp)
+            Text("  • Довжина ПЛ-110: 10 км", fontSize = 12.sp)
+            Text("  • Кількість приєднань: 6", fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+fun Task2Input(
+    zperAVal: String,
+    zperPVal: String,
+    omegaVal: String,
+    tvVal: String,
+    kpVal: String,
+    pmVal: String,
+    tmVal: String,
+    onZperAChange: (String) -> Unit,
+    onZperPChange: (String) -> Unit,
+    onOmegaChange: (String) -> Unit,
+    onTvChange: (String) -> Unit,
+    onKpChange: (String) -> Unit,
+    onPmChange: (String) -> Unit,
+    onTmChange: (String) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Вхідні дані:", fontWeight = FontWeight.Bold)
+
+            InputFieldWithUnit(
+                label = "Зпер.а (питомі збитки аварійні)",
+                value = zperAVal,
+                onValueChange = onZperAChange,
+                unit = "грн/кВт·год"
             )
-            values.forEach { value ->
-                Text(
-                    text = value,
-                    modifier = Modifier.width(60.dp),
-                    fontSize = 10.sp,
-                    textAlign = TextAlign.Center
+
+            InputFieldWithUnit(
+                label = "Зпер.п (питомі збитки планові)",
+                value = zperPVal,
+                onValueChange = onZperPChange,
+                unit = "грн/кВт·год"
+            )
+
+            InputFieldWithUnit(
+                label = "ω (частота відмов)",
+                value = omegaVal,
+                onValueChange = onOmegaChange,
+                unit = "рік⁻¹"
+            )
+
+            InputFieldWithUnit(
+                label = "tв (час відновлення)",
+                value = tvVal,
+                onValueChange = onTvChange,
+                unit = "року"
+            )
+
+            InputFieldWithUnit(
+                label = "kп (коефіцієнт планових простоїв)",
+                value = kpVal,
+                onValueChange = onKpChange,
+                unit = ""
+            )
+
+            InputFieldWithUnit(
+                label = "Pм (максимальна потужність)",
+                value = pmVal,
+                onValueChange = onPmChange,
+                unit = "кВт"
+            )
+
+            InputFieldWithUnit(
+                label = "Tм (час використання)",
+                value = tmVal,
+                onValueChange = onTmChange,
+                unit = "год"
+            )
+        }
+    }
+}
+
+@Composable
+fun Task1Results() {
+    // Constants
+    val pl110OmegaVal = 0.007
+    val t110OmegaVal = 0.015
+    val v110OmegaVal = 0.01
+    val v10OmegaVal = 0.02
+    val tiresOmegaVal = 0.03
+
+    val pl110TviVal = 10.0
+    val t110TviVal = 100.0
+    val v110TviVal = 30.0
+    val v10TviVal = 15.0
+    val tiresTviVal = 2.0
+
+    val plannedKMaxVal = 43.0
+
+    val omegaSum = calcOmegaSum(pl110OmegaVal, tiresOmegaVal, t110OmegaVal, v110OmegaVal, v10OmegaVal)
+    val tvos = calcTvos(
+        pl110OmegaVal, tiresOmegaVal, t110OmegaVal, v110OmegaVal, v10OmegaVal,
+        pl110TviVal, tiresTviVal, t110TviVal, v110TviVal, v10TviVal, omegaSum
+    )
+    val kaos = calcKaos(omegaSum, tvos)
+    val kpos = calcKpos(plannedKMaxVal)
+    val dkOmega = calcDKOmega(omegaSum, kaos, kpos)
+    val dsOmega = calcDSOmega(dkOmega, v10OmegaVal)
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Результати [1]:", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+
+            ResultCard(
+                "Частота відмов одноколової системи:",
+                String.format("%.3f", omegaSum),
+                "рік⁻¹",
+                MaterialTheme.colorScheme.errorContainer
+            )
+
+            ResultCard(
+                "Середня тривалість відновлення:",
+                String.format("%.2f", tvos),
+                "год",
+                MaterialTheme.colorScheme.surfaceVariant
+            )
+
+            ResultCard(
+                "Коефіцієнт аварійного простою одноколової системи:",
+                String.format("%.6f", kaos),
+                "",
+                MaterialTheme.colorScheme.surfaceVariant
+            )
+
+            ResultCard(
+                "Коефіцієнт планового простою одноколової системи:",
+                String.format("%.6f", kpos),
+                "",
+                MaterialTheme.colorScheme.surfaceVariant
+            )
+
+            ResultCard(
+                "Частота відмов одночасно двох кіл двоколової системи:",
+                String.format("%.6f", dkOmega),
+                "",
+                MaterialTheme.colorScheme.tertiaryContainer
+            )
+
+            ResultCard(
+                "Частота відмов двоколової системи з урахуванням секційного вимикача:",
+                String.format("%.3f", dsOmega),
+                "",
+                MaterialTheme.colorScheme.primaryContainer
+            )
+
+            Divider()
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        "Висновок:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Text(
+                        "Отже, надійність двоколової системи електропередачі є значно вищою ніж одноколової.",
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Text(
+                        "Частота відмов двоколової системи: ${String.format("%.3f", dsOmega)} << ${String.format("%.3f", omegaSum)} (одноколової)",
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun TotalsResultRow(calculations: Calculations) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
-        )
-    ) {
+fun Task2Results(zperA: Double, zperP: Double, omega: Double, tv: Double, kp: Double, pm: Double, tm: Double) {
+    val wneda = calcWneda(omega, tv, pm, tm)
+    val wnedp = calcWnedp(kp, pm, tm)
+    val zper = calcZper(zperA, wneda, zperP, wnedp)
+
+    Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                "Загальні результати:",
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
+            Text("Результати [2]:", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+
+            ResultCard(
+                "Математичне сподівання аварійного недовідпущення електроенергії:",
+                String.format("%.2f", wneda),
+                "кВт·год",
+                MaterialTheme.colorScheme.errorContainer
             )
 
-            ResultItem("Загальна кількість ЕП:", String.format("%.0f", calculations.totalERAmount))
-            ResultItem("Σ(n·Pн):", String.format("%.2f", calculations.totalProduct1) + " кВт")
-            ResultItem("Коефіцієнт використання (Kв):", String.format("%.3f", calculations.totalUtilizationRate))
-            ResultItem("Σ(n·Pн·Kв):", String.format("%.2f", calculations.totalProduct2) + " кВт")
-            ResultItem("Σ(n·Pн·Kв·tgφ):", String.format("%.2f", calculations.totalProduct3) + " квар")
-            ResultItem("Σ(n·Pн²):", String.format("%.2f", calculations.totalProduct4))
-            ResultItem("Ефективна кількість ЕП (nе):", String.format("%.2f", calculations.erEffectiveQuantity))
-            ResultItem("Розрахунковий коефіцієнт (Kр):", String.format("%.2f", calculations.erPowerFactor))
-            ResultItem("Розрахункове активне навантаження (Pр):", String.format("%.2f", calculations.activeLoad) + " кВт")
-            ResultItem("Розрахункове реактивне навантаження (Qр):", String.format("%.2f", calculations.reactiveLoad) + " квар")
-            ResultItem("Повна потужність (Sр):", String.format("%.2f", calculations.fullPower) + " кВ·А")
-            ResultItem("Розрахунковий груповий струм (Iр):", String.format("%.2f", calculations.erGroupCurrent) + " А")
+            ResultCard(
+                "Математичне сподівання планового недовідпущення електроенергії:",
+                String.format("%.2f", wnedp),
+                "кВт·год",
+                MaterialTheme.colorScheme.surfaceVariant
+            )
+
+            ResultCard(
+                "Математичне сподівання збитків від переривання електропостачання:",
+                String.format("%.2f", zper),
+                "грн",
+                MaterialTheme.colorScheme.primaryContainer
+            )
         }
     }
 }
 
 @Composable
-fun ResultItem(label: String, value: String) {
+fun InputFieldWithUnit(label: String, value: String, onValueChange: (String) -> Unit, unit: String) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, fontSize = 12.sp)
-        Text(
-            text = value,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+        Text(text = label, modifier = Modifier.weight(2f), fontSize = 13.sp)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1.2f),
+            singleLine = true
         )
+        Text(text = unit, modifier = Modifier.weight(1f).padding(start = 4.dp), fontSize = 12.sp)
     }
 }
 
-data class Calculations(
-    val totalERAmount: Double,
-    val totalProduct1: Double,
-    val totalProduct2: Double,
-    val totalProduct3: Double,
-    val totalProduct4: Double,
-    val totalUtilizationRate: Double,
-    val erEffectiveQuantity: Double,
-    val erPowerFactor: Double,
-    val activeLoad: Double,
-    val reactiveLoad: Double,
-    val fullPower: Double,
-    val erGroupCurrent: Double
-)
-
-fun calculateTotals(rows: Map<Int, EquipmentRow>, erPowerFactor: Double): Calculations {
-    val totalERAmount = rows.values.sumOf { it.erAmount.toDoubleOrNull() ?: 0.0 }
-
-    val totalProduct1 = rows.values.sumOf {
-        calcProduct1(
-            it.erAmount.toDoubleOrNull() ?: 0.0,
-            it.erRatedPower.toDoubleOrNull() ?: 0.0
-        )
+@Composable
+fun ResultCard(label: String, value: String, unit: String, backgroundColor: androidx.compose.ui.graphics.Color) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(text = label, fontSize = 13.sp)
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Text(
+                    text = value,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (unit.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = unit,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                }
+            }
+        }
     }
-
-    val totalProduct2 = rows.values.sumOf {
-        calcProduct2(
-            it.erAmount.toDoubleOrNull() ?: 0.0,
-            it.erRatedPower.toDoubleOrNull() ?: 0.0,
-            it.utilizationRate.toDoubleOrNull() ?: 0.0
-        )
-    }
-
-    val totalProduct3 = rows.values.sumOf {
-        calcProduct3(
-            it.erAmount.toDoubleOrNull() ?: 0.0,
-            it.erRatedPower.toDoubleOrNull() ?: 0.0,
-            it.utilizationRate.toDoubleOrNull() ?: 0.0,
-            it.reactivePower.toDoubleOrNull() ?: 0.0
-        )
-    }
-
-    val totalProduct4 = rows.values.sumOf {
-        calcProduct4(
-            it.erAmount.toDoubleOrNull() ?: 0.0,
-            it.erRatedPower.toDoubleOrNull() ?: 0.0
-        )
-    }
-
-    val totalUtilizationRate = if (totalProduct1 > 0) totalProduct2 / totalProduct1 else 0.0
-    val erEffectiveQuantity = if (totalProduct4 > 0) totalProduct1.pow(2) / totalProduct4 else 0.0
-    val activeLoad = erPowerFactor * totalProduct2
-    val reactiveLoad = erPowerFactor * totalProduct3
-    val fullPower = sqrt(activeLoad.pow(2) + reactiveLoad.pow(2))
-
-    // Use first row's voltage for group current calculation
-    val firstVoltage = rows[1]?.loadVoltage?.toDoubleOrNull() ?: 10.0
-    val erGroupCurrent = if (firstVoltage > 0) activeLoad / firstVoltage else 0.0
-
-    return Calculations(
-        totalERAmount = totalERAmount,
-        totalProduct1 = totalProduct1,
-        totalProduct2 = totalProduct2,
-        totalProduct3 = totalProduct3,
-        totalProduct4 = totalProduct4,
-        totalUtilizationRate = totalUtilizationRate,
-        erEffectiveQuantity = erEffectiveQuantity,
-        erPowerFactor = erPowerFactor,
-        activeLoad = activeLoad,
-        reactiveLoad = reactiveLoad,
-        fullPower = fullPower,
-        erGroupCurrent = erGroupCurrent
-    )
 }
 
-// Calculation functions
-fun calcProduct1(erAmount: Double, erRatedPower: Double): Double {
-    return erAmount * erRatedPower
+// Task 1 calculations
+fun calcOmegaSum(pl110: Double, tires: Double, t110: Double, v110: Double, v10: Double): Double {
+    return pl110 * 10.0 + t110 + v110 + v10 + 6.0 * tires
 }
 
-fun calcProduct2(erAmount: Double, erRatedPower: Double, utilizationRate: Double): Double {
-    return calcProduct1(erAmount, erRatedPower) * utilizationRate
+fun calcTvos(
+    pl110: Double, tires: Double, t110: Double, v110: Double, v10: Double,
+    pl110Tvi: Double, tiresTvi: Double, t110Tvi: Double, v110Tvi: Double, v10Tvi: Double,
+    omegaSum: Double
+): Double {
+    return (pl110 * 10.0 * pl110Tvi + t110 * t110Tvi + v110 * v110Tvi + v10 * v10Tvi + tires * 6.0 * tiresTvi) / omegaSum
 }
 
-fun calcProduct3(erAmount: Double, erRatedPower: Double, utilizationRate: Double, reactivePower: Double): Double {
-    return calcProduct2(erAmount, erRatedPower, utilizationRate) * reactivePower
+fun calcKaos(omegaSum: Double, tvos: Double): Double {
+    return (omegaSum * tvos) / 8760.0
 }
 
-fun calcProduct4(erAmount: Double, erRatedPower: Double): Double {
-    return erAmount * erRatedPower.pow(2)
+fun calcKpos(plannedKMax: Double): Double {
+    return 1.2 * (plannedKMax / 8760.0)
 }
 
-fun calcGroupCurrent(erAmount: Double, erRatedPower: Double, loadVoltage: Double, loadPower: Double, erEfficiency: Double): Double {
-    if (loadVoltage == 0.0 || loadPower == 0.0 || erEfficiency == 0.0) return 0.0
-    return (erAmount * erRatedPower) / (sqrt(3.0) * loadVoltage * loadPower * erEfficiency)
+fun calcDKOmega(omegaSum: Double, kaos: Double, kpos: Double): Double {
+    return 2.0 * omegaSum * (kaos + kpos)
+}
+
+fun calcDSOmega(dkOmega: Double, v10Omega: Double): Double {
+    return dkOmega + v10Omega
+}
+
+// Task 2 calculations
+fun calcWneda(omega: Double, tv: Double, pm: Double, tm: Double): Double {
+    return omega * tv * pm * tm
+}
+
+fun calcWnedp(kp: Double, pm: Double, tm: Double): Double {
+    return kp * pm * tm
+}
+
+fun calcZper(zperA: Double, wneda: Double, zperP: Double, wnedp: Double): Double {
+    return zperA * wneda + zperP * wnedp
 }
