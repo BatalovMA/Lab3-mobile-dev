@@ -22,6 +22,7 @@ private val DarkBackground = Color(0xFF212121)
 private val LightForeground = Color(0xFFFFFFFF)
 private val PrimaryColor = Color(0xFF90CAF9)
 private val SecondaryColor = Color(0xFFCE93D8)
+private val ErrorColor = Color(0xFFEF5350)
 private val BorderColor = Color(0xFFFFFFFF)
 
 private val AppColorScheme = darkColorScheme(
@@ -33,6 +34,13 @@ private val AppColorScheme = darkColorScheme(
     onSecondary = Color.Black,
     secondaryContainer = SecondaryColor.copy(alpha = 0.3f),
     onSecondaryContainer = LightForeground,
+    tertiary = Color(0xFF80CBC4),
+    onTertiary = Color.Black,
+    tertiaryContainer = Color(0xFF80CBC4).copy(alpha = 0.3f),
+    onTertiaryContainer = LightForeground,
+    error = ErrorColor,
+    errorContainer = ErrorColor.copy(alpha = 0.3f),
+    onErrorContainer = LightForeground,
     background = DarkBackground,
     onBackground = LightForeground,
     surface = DarkBackground,
@@ -51,7 +59,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    ShortCircuitCalculatorScreen()
+                    SolarProfitCalculatorScreen()
                 }
             }
         }
@@ -59,18 +67,25 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun ShortCircuitCalculatorScreen() {
-    var selectedTask by remember { mutableStateOf(0) }
+fun SolarProfitCalculatorScreen() {
+    var averagePowerVal by remember { mutableStateOf("5.0") }
+    var sigma1Val by remember { mutableStateOf("1.0") }
+    var sigma2Val by remember { mutableStateOf("0.25") }
+    var costVal by remember { mutableStateOf("7.0") }
 
-    // Task 1 states
-    var ikVal by remember { mutableStateOf("2500") }
-    var tPhiVal by remember { mutableStateOf("2.5") }
-    var smVal by remember { mutableStateOf("1300") }
+    val averagePower = averagePowerVal.toDoubleOrNull() ?: 5.0
+    val sigma1 = sigma1Val.toDoubleOrNull() ?: 1.0
+    val sigma2 = sigma2Val.toDoubleOrNull() ?: 0.25
+    val cost = costVal.toDoubleOrNull() ?: 7.0
 
-    // Task 2 states
-    var kzPower by remember { mutableStateOf("200") }
+    // Power range for integration
+    val powerRangeBot = 4.75
+    val powerRangeTop = 5.25
 
-    // Task 3 has no user inputs - all hardcoded
+    // Calculate results
+    val results = remember(averagePower, sigma1, sigma2, cost) {
+        calculateProfits(averagePower, sigma1, sigma2, cost, powerRangeBot, powerRangeTop)
+    }
 
     Column(
         modifier = Modifier
@@ -80,7 +95,7 @@ fun ShortCircuitCalculatorScreen() {
     ) {
         // Header
         Text(
-            text = "Веб калькулятор для розрахунку струму трифазного КЗ, струму однофазного КЗ, та перевірки на термічну та динамічну стійкість",
+            text = "Веб калькулятор розрахунку прибутку від сонячних електростанцій з встановленою системою прогнозування сонячної потужності",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -89,328 +104,196 @@ fun ShortCircuitCalculatorScreen() {
                 .padding(bottom = 24.dp)
         )
 
-        // Task Selector
+        // Input Section
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 16.dp)
         ) {
             Column(
-                modifier = Modifier.padding(16.dp)
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Вибір завдання:",
+                    text = "Умова:",
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    fontSize = 18.sp
                 )
 
-                TaskSelectorButton(
-                    text = "[1] Вибрати кабелі з напругою 10 кВ",
-                    isSelected = selectedTask == 1,
-                    onClick = { selectedTask = 1 }
+                InputFieldWithUnit(
+                    label = "Pс (Середня потужність СЕС)",
+                    value = averagePowerVal,
+                    onValueChange = { averagePowerVal = it },
+                    unit = "МВт"
                 )
 
-                TaskSelectorButton(
-                    text = "[2] Визначити струми КЗ на шинах 10 кВ ГПП",
-                    isSelected = selectedTask == 2,
-                    onClick = { selectedTask = 2 }
+                InputFieldWithUnit(
+                    label = "σ₁ (СКВ до вдосконалення)",
+                    value = sigma1Val,
+                    onValueChange = { sigma1Val = it },
+                    unit = "МВт"
                 )
 
-                TaskSelectorButton(
-                    text = "[3] Визначити струми КЗ для підстанції",
-                    isSelected = selectedTask == 3,
-                    onClick = { selectedTask = 3 }
+                InputFieldWithUnit(
+                    label = "σ₂ (СКВ після вдосконалення)",
+                    value = sigma2Val,
+                    onValueChange = { sigma2Val = it },
+                    unit = "МВт"
+                )
+
+                InputFieldWithUnit(
+                    label = "В (Тариф «зеленого» аукціону)",
+                    value = costVal,
+                    onValueChange = { costVal = it },
+                    unit = "грн/кВт·год"
                 )
             }
         }
 
-        // Input Section
-        when (selectedTask) {
-            1 -> Task1Input(
-                ikVal = ikVal,
-                tPhiVal = tPhiVal,
-                smVal = smVal,
-                onIkChange = { ikVal = it },
-                onTPhiChange = { tPhiVal = it },
-                onSmChange = { smVal = it }
+        // Description Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
             )
-            2 -> Task2Input(
-                kzPower = kzPower,
-                onKzPowerChange = { kzPower = it }
-            )
-            3 -> Task3Input()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "Пояснення:",
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                Text(
+                    text = "Розрахунок базується на системі \"зеленого\" аукціону, де:",
+                    fontSize = 14.sp
+                )
+                Text("• σ₁ - середньоквадратичне відхилення ДО вдосконалення системи прогнозування", fontSize = 12.sp)
+                Text("• σ₂ - середньоквадратичне відхилення ПІСЛЯ вдосконалення системи прогнозування", fontSize = 12.sp)
+                Text("• Менше σ означає кращий прогноз і менші штрафи", fontSize = 12.sp)
+                Text("• Прибуток = Виручка за продану енергію - Штрафи за неточний прогноз", fontSize = 12.sp)
+            }
         }
 
         // Results Section
-        when (selectedTask) {
-            1 -> Task1Results(
-                ikVal = ikVal.toDoubleOrNull() ?: 0.0,
-                tPhiVal = tPhiVal.toDoubleOrNull() ?: 0.0,
-                smVal = smVal.toDoubleOrNull() ?: 0.0
-            )
-            2 -> Task2Results(
-                kzPower = kzPower.toDoubleOrNull() ?: 0.0
-            )
-            3 -> Task3Results()
-        }
-    }
-}
-
-@Composable
-fun TaskSelectorButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Text(text, textAlign = TextAlign.Start)
-    }
-}
-
-@Composable
-fun Task1Input(
-    ikVal: String,
-    tPhiVal: String,
-    smVal: String,
-    onIkChange: (String) -> Unit,
-    onTPhiChange: (String) -> Unit,
-    onSmChange: (String) -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Card(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Вхідні дані:", fontWeight = FontWeight.Bold)
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Відповідь:",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
 
-            InputFieldWithUnit(
-                label = "Iк (струм КЗ)",
-                value = ikVal,
-                onValueChange = onIkChange,
-                unit = "А"
-            )
+                // Result for sigma1
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Прибуток до вдосконалення (σ₁ = $sigma1 МВт):",
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "${String.format("%.2f", results.profit1)} тис. грн",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
 
-            InputFieldWithUnit(
-                label = "tф (фіктивний час)",
-                value = tPhiVal,
-                onValueChange = onTPhiChange,
-                unit = "с"
-            )
+                // Result for sigma2
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Прибуток після вдосконалення (σ₂ = $sigma2 МВт):",
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "${String.format("%.2f", results.profit2)} тис. грн",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
 
-            InputFieldWithUnit(
-                label = "Sм (потужність ТП)",
-                value = smVal,
-                onValueChange = onSmChange,
-                unit = "кВ·А"
-            )
+                Divider()
 
-            Divider()
+                // Improvement
+                val improvement = results.profit2 - results.profit1
+                val improvementPercent = if (results.profit1 != 0.0) {
+                    (improvement / abs(results.profit1)) * 100
+                } else 0.0
 
-            Text("Константи:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("• Потужність ТП: 2×1000 кВ·А", fontSize = 12.sp)
-            Text("• Tм (годин використання): 4000 год", fontSize = 12.sp)
-            Text("• jек (економічна густина струму): 1.4 А/мм²", fontSize = 12.sp)
-            Text("• Cт (коефіцієнт): 92 с⁰·⁵/мм²", fontSize = 12.sp)
-        }
-    }
-}
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = "Покращення прибутку:",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Text(
+                            text = "+${String.format("%.2f", improvement)} тис. грн",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = "(${String.format("%.1f", improvementPercent)}% покращення)",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
 
-@Composable
-fun Task2Input(kzPower: String, onKzPowerChange: (String) -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Вхідні дані:", fontWeight = FontWeight.Bold)
+                // Detailed breakdown
+                Divider()
 
-            InputFieldWithUnit(
-                label = "Nкз (потужність КЗ)",
-                value = kzPower,
-                onValueChange = onKzPowerChange,
-                unit = "МВ·А"
-            )
+                Text(
+                    text = "Детальний розрахунок:",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
 
-            Divider()
+                DetailedResults(
+                    title = "До вдосконалення (σ₁)",
+                    revenue = results.revenue1,
+                    fine = results.fine1,
+                    profit = results.profit1
+                )
 
-            Text("Константи:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("• Uс.н: 10.5 кВ", fontSize = 12.sp)
-            Text("• Uк%: 10.5 кВ", fontSize = 12.sp)
-            Text("• Sном.т: 6.3 А/мм²", fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-fun Task3Input() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text("Константи (всі значення задано):", fontWeight = FontWeight.Bold)
-            Text("• Uк.max: 11.1 %", fontSize = 12.sp)
-            Text("• Uв.н: 115 В", fontSize = 12.sp)
-            Text("• Sном.т: 6.3 МВ·А", fontSize = 12.sp)
-            Text("• Rш: 10.65 Ом", fontSize = 12.sp)
-            Text("• Rс.н: 10.65 Ом", fontSize = 12.sp)
-            Text("• Xс.н: 24.02 Ом", fontSize = 12.sp)
-            Text("• Rш.min: 34.88 Ом", fontSize = 12.sp)
-            Text("• Rс.min: 34.88 Ом", fontSize = 12.sp)
-            Text("• Xс.min: 65.68 Ом", fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-fun Task1Results(ikVal: Double, tPhiVal: Double, smVal: Double) {
-    val nominalTension = 10.0
-    val currentDensity = 1.4
-    val ctVal = 92.0
-
-    val im = calcIm(smVal, nominalTension)
-    val imPa = calcImPa(im)
-    val sek = calcSek(im, currentDensity)
-    val sMin = calcSMin(ikVal, tPhiVal, ctVal)
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Результати [1]:", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-
-            ResultItem(
-                "Розрахунковий струм для нормального режиму:",
-                "${String.format("%.2f", im)} А"
-            )
-
-            ResultItem(
-                "Розрахунковий струм для післяаварійного режиму:",
-                "${String.format("%.2f", imPa)} А"
-            )
-
-            ResultItem(
-                "Економічний переріз:",
-                "${String.format("%.2f", sek)} мм²"
-            )
-
-            ResultItem(
-                "Рекомендований кабель:",
-                "ААБ 10 3×25"
-            )
-
-            ResultItem(
-                "Термічна стійкість кабелю до дії струмів КЗ:",
-                "${String.format("%.2f", sMin)} мм²"
-            )
-        }
-    }
-}
-
-@Composable
-fun Task2Results(kzPower: Double) {
-    val usnVal = 10.5
-    val ukPercVal = 10.5
-    val snomtVal = 6.3
-
-    val sumX = calcSumX(kzPower, usnVal, ukPercVal, snomtVal)
-    val ip0 = calcIp0(usnVal, sumX)
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Результати [2]:", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-
-            ResultItem(
-                "Сумарний опір для точки К1:",
-                "${String.format("%.2f", sumX)} Ом"
-            )
-
-            ResultItem(
-                "Початкове діюче значення струму трифазного КЗ:",
-                "${String.format("%.2f", ip0)} кА"
-            )
-        }
-    }
-}
-
-@Composable
-fun Task3Results() {
-    val ukmaxVal = 11.1
-    val uvnVal = 115.0
-    val snomtVal = 6.3
-    val rshVal = 10.65
-    val xcnVal = 24.02
-    val rshMinVal = 34.88
-    val xcMinVal = 65.68
-
-    val xt = calcXt(ukmaxVal, uvnVal, snomtVal)
-    val xsh = calcXsh(xcnVal, xt)
-    val zsh = calcZsh(rshVal, xsh)
-    val xshMin = calcXshMin(xcMinVal, xt)
-    val zshMin = calcZshMin(rshMinVal, xshMin)
-    val ish3 = calcIsh3(uvnVal, zsh)
-    val ish2 = calcIsh2(ish3)
-    val ish3Min = calcIsh3Min(uvnVal, zshMin)
-    val ish2Min = calcIsh2Min(ish3Min)
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Результати [3]:", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-
-            ResultItem(
-                "Реактивний опір силового трансформатора:",
-                "${String.format("%.2f", xt)} Ом"
-            )
-
-            Divider()
-
-            Text("Опори в нормальному режимі:", fontWeight = FontWeight.SemiBold)
-            ResultItem("Z =", "${String.format("%.2f", zsh)} Ом")
-            ResultItem("X =", "${String.format("%.2f", xsh)} Ом")
-
-            Divider()
-
-            Text("Опори в мінімальному режимі:", fontWeight = FontWeight.SemiBold)
-            ResultItem("Z =", "${String.format("%.2f", zshMin)} Ом")
-            ResultItem("X =", "${String.format("%.2f", xshMin)} Ом")
-
-            Divider()
-
-            Text("Струми в нормальному режимі:", fontWeight = FontWeight.SemiBold)
-            ResultItem("I(3) =", "${String.format("%.2f", ish3)} А")
-            ResultItem("I(2) =", "${String.format("%.2f", ish2)} А")
-
-            Divider()
-
-            Text("Струми в мінімальному режимі:", fontWeight = FontWeight.SemiBold)
-            ResultItem("I(3) =", "${String.format("%.2f", ish3Min)} А")
-            ResultItem("I(2) =", "${String.format("%.2f", ish2Min)} А")
+                DetailedResults(
+                    title = "Після вдосконалення (σ₂)",
+                    revenue = results.revenue2,
+                    fine = results.fine2,
+                    profit = results.profit2
+                )
+            }
         }
     }
 }
@@ -422,92 +305,161 @@ fun InputFieldWithUnit(label: String, value: String, onValueChange: (String) -> 
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, modifier = Modifier.weight(2f), fontSize = 14.sp)
+        Text(
+            text = label,
+            modifier = Modifier.weight(2f),
+            fontSize = 14.sp
+        )
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.weight(1.5f),
+            modifier = Modifier.weight(1f),
             singleLine = true
         )
-        Text(text = unit, modifier = Modifier.weight(1f).padding(start = 8.dp), fontSize = 14.sp)
+        Text(
+            text = unit,
+            modifier = Modifier.weight(1f).padding(start = 8.dp),
+            fontSize = 14.sp
+        )
     }
 }
 
 @Composable
-fun ResultItem(label: String, value: String) {
-    Row(
+fun DetailedResults(title: String, revenue: Double, fine: Double, profit: Double) {
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label, fontSize = 14.sp)
-        Text(
-            text = value,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = title,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Виручка:", fontSize = 12.sp)
+                Text("${String.format("%.2f", revenue)} тис. грн", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Штрафи:", fontSize = 12.sp)
+                Text("${String.format("%.2f", fine)} тис. грн", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+            Divider(modifier = Modifier.padding(vertical = 4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Прибуток:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "${String.format("%.2f", profit)} тис. грн",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
 
-// Task 1 calculations
-fun calcIm(sm: Double, nominalTension: Double): Double {
-    return (sm / 2.0) / (sqrt(3.0) * nominalTension)
+data class ProfitResults(
+    val revenue1: Double,
+    val fine1: Double,
+    val profit1: Double,
+    val revenue2: Double,
+    val fine2: Double,
+    val profit2: Double
+)
+
+// Calculation functions
+fun calculateProfits(
+    averagePower: Double,
+    sigma1: Double,
+    sigma2: Double,
+    cost: Double,
+    powerRangeBot: Double,
+    powerRangeTop: Double
+): ProfitResults {
+    // Calculate for sigma1
+    val deltaW1 = integrate(
+        { p -> calcDeltaW(p, averagePower, sigma1) },
+        powerRangeBot,
+        powerRangeTop,
+        1000
+    )
+    val w1 = calcWPos(averagePower, deltaW1)
+    val p1 = calcP(w1, cost)
+    val w2 = calcWNeg(averagePower, deltaW1)
+    val f1 = calcF(w2, cost)
+    val totalProfit1 = calcTotalProfit(p1, f1)
+
+    // Calculate for sigma2
+    val deltaW2 = integrate(
+        { p -> calcDeltaW(p, averagePower, sigma2) },
+        powerRangeBot,
+        powerRangeTop,
+        1000
+    )
+    val w3 = calcWPos(averagePower, deltaW2)
+    val p2 = calcP(w3, cost)
+    val w4 = calcWNeg(averagePower, deltaW2)
+    val f2 = calcF(w4, cost)
+    val totalProfit2 = calcTotalProfit(p2, f2)
+
+    return ProfitResults(
+        revenue1 = p1,
+        fine1 = f1,
+        profit1 = totalProfit1,
+        revenue2 = p2,
+        fine2 = f2,
+        profit2 = totalProfit2
+    )
 }
 
-fun calcImPa(im: Double): Double {
-    return 2.0 * im
+fun integrate(func: (Double) -> Double, start: Double, end: Double, numPoints: Int): Double {
+    val step = (end - start) / numPoints
+    var sum = 0.5 * (func(start) + func(end))
+
+    var i = start
+    while (i < end) {
+        sum += func(i)
+        i += step
+    }
+
+    return sum * step
 }
 
-fun calcSek(im: Double, currentDensity: Double): Double {
-    return im / currentDensity
+fun calcDeltaW(p: Double, averagePower: Double, sigma: Double): Double {
+    return (1.0 / (sigma * sqrt(2.0 * PI))) *
+           exp(-((p - averagePower).pow(2)) / (2.0 * sigma.pow(2)))
 }
 
-fun calcSMin(ik: Double, tPhi: Double, ct: Double): Double {
-    return (ik * sqrt(tPhi)) / ct
+fun calcWPos(averagePower: Double, deltaW: Double): Double {
+    return averagePower * 24.0 * deltaW
 }
 
-// Task 2 calculations
-fun calcSumX(kzPower: Double, usn: Double, ukPerc: Double, snomt: Double): Double {
-    return (usn.pow(2) / kzPower) + ((ukPerc / 100.0) * (usn.pow(2) / snomt))
+fun calcP(w: Double, cost: Double): Double {
+    return w * cost
 }
 
-fun calcIp0(usn: Double, sumX: Double): Double {
-    return usn / (sqrt(3.0) * sumX)
+fun calcWNeg(averagePower: Double, deltaW: Double): Double {
+    return averagePower * 24.0 * (1.0 - deltaW)
 }
 
-// Task 3 calculations
-fun calcXt(ukmax: Double, uvn: Double, snomt: Double): Double {
-    return (ukmax * uvn.pow(2)) / (100.0 * snomt)
+fun calcF(w: Double, cost: Double): Double {
+    return w * cost
 }
 
-fun calcXsh(xcn: Double, xt: Double): Double {
-    return xcn + xt
-}
-
-fun calcZsh(rsh: Double, xsh: Double): Double {
-    return sqrt(rsh.pow(2) + xsh.pow(2))
-}
-
-fun calcXshMin(xcMin: Double, xt: Double): Double {
-    return xcMin + xt
-}
-
-fun calcZshMin(rshMin: Double, xshMin: Double): Double {
-    return sqrt(rshMin.pow(2) + xshMin.pow(2))
-}
-
-fun calcIsh3(uvn: Double, zsh: Double): Double {
-    return (uvn * 1000.0) / (sqrt(3.0) * zsh)
-}
-
-fun calcIsh2(ish3: Double): Double {
-    return ish3 * (sqrt(3.0) / 2.0)
-}
-
-fun calcIsh3Min(uvn: Double, zshMin: Double): Double {
-    return (uvn * 1000.0) / (sqrt(3.0) * zshMin)
-}
-
-fun calcIsh2Min(ish3Min: Double): Double {
-    return ish3Min * (sqrt(3.0) / 2.0)
+fun calcTotalProfit(profit: Double, fine: Double): Double {
+    return profit - fine
 }
